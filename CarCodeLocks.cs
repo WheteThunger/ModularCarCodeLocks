@@ -132,7 +132,6 @@ namespace Oxide.Plugins
                 !VerifyNotBuildingBlocked(player) ||
                 !VerifyCarFound(player, out car) ||
                 !VerifyCarIsNotDead(player, car) ||
-                !VerifyNoOwnershipRestriction(player, car) ||
                 !VerifyCarHasNoLock(player, car) ||
                 !VerifyCarCanHaveALock(player, car) ||
                 !VerifyPlayerHasLockOrResources(player) ||
@@ -220,13 +219,6 @@ namespace Oxide.Plugins
         {
             if (!car.IsDead()) return true;
             ReplyToPlayer(player, "Error.CarDead");
-            return false;
-        }
-
-        private bool VerifyNoOwnershipRestriction(IPlayer player, ModularCar car)
-        {
-            if (pluginConfig.AllowLockingCarsOwnedByOthers || car.OwnerID == 0 || car.OwnerID.ToString() == player.Id) return true;
-            ReplyToPlayer(player, "Error.OwnedByOther");
             return false;
         }
 
@@ -401,9 +393,6 @@ namespace Oxide.Plugins
             [JsonProperty("AllowEditingWhileLockedOut")]
             public bool AllowEditingWhileLockedOut = true;
 
-            [JsonProperty("AllowLockingCarsOwnedByOthers")]
-            public bool AllowLockingCarsOwnedByOthers = false;
-
             [JsonProperty("CooldownSeconds")]
             public float CooldownSeconds = 10.0f;
 
@@ -457,7 +446,6 @@ namespace Oxide.Plugins
                 ["Error.BuildingBlocked"] = "Error: Cannot do that while building blocked.",
                 ["Error.NoCarFound"] = "Error: No car found.",
                 ["Error.CarDead"] = "Error: That car is dead.",
-                ["Error.OwnedByOther"] = "Error: That car is owned by someone else.",
                 ["Error.NotOnLift"] = "Error: That car must be on a lift to receive a lock.",
                 ["Error.HasLock"] = "Error: That car already has a lock.",
                 ["Error.NoCockpit"] = "Error: That car needs a driver seat to receive a lock.",

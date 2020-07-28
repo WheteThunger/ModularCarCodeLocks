@@ -21,7 +21,6 @@
 {
   "AllowDeployOffLift": false,
   "AllowEditingWhileLockedOut": true,
-  "AllowLockingCarsOwnedByOthers": false,
   "CodeLockCost": {
     "Amount": 100,
     "ItemShortName": "metal.fragments"
@@ -32,7 +31,6 @@
 
 - `AllowDeployOffLift` (`true` or `false`) -- Whether to allow players to deploy code locks to cars that are not currently on a lift. This is `false` by default to be consistent with how key locks work.
 - `AllowEditingWhileLockedOut` (`true` or `false`) -- Whether to allow players to edit cars at lifts when they are not authorized to the car's code lock. This is `true` by default to be consistent with how key locks work.
-- `AllowLockingCarsOwnedByOthers` (`true` or `false`) -- Whether to allow players to deploy code locks to cars owned by other players (e.g., cars spawned by mods). Regardless of this setting, players can always deploy code locks to their own cars or randomly spawned cars.
 - `CodeLockCost` -- The amount to charge a player when crafting a code lock automatically.
 - `CooldownSeconds` -- Cooldown to prevent players from using this plugin to make locks faster than the game naturally allows with crafting. Configure this based on the crafting speed of locks on your server.
 
@@ -44,7 +42,6 @@
   "Error.BuildingBlocked": "Error: Cannot do that while building blocked.",
   "Error.NoCarFound": "Error: No car found.",
   "Error.CarDead": "Error: That car is dead.",
-  "Error.OwnedByOther": "Error: That car is owned by someone else.",
   "Error.NotOnLift": "Error: That car must be on a lift to receive a lock.",
   "Error.HasLock": "Error: That car already has a lock.",
   "Error.NoCockpit": "Error: That car needs a driver seat to receive a lock.",
