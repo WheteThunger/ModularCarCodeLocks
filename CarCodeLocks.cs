@@ -448,7 +448,7 @@ namespace Oxide.Plugins
                 ["Error.CarDead"] = "Error: That car is dead.",
                 ["Error.NotOnLift"] = "Error: That car must be on a lift to receive a lock.",
                 ["Error.HasLock"] = "Error: That car already has a lock.",
-                ["Error.NoCockpit"] = "Error: That car needs a driver seat to receive a lock.",
+                ["Error.NoCockpit"] = "Error: That car needs a cockpit module to receive a lock.",
                 ["Error.InsufficientResources"] = "Error: You need <color=red>{0} {1}</color> to craft a lock.",
                 ["Error.Cooldown"] = "Please wait <color=red>{0}s</color> and try again.",
                 ["Error.CarLocked"] = "That vehicle is locked.",

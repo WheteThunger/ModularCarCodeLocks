@@ -1,11 +1,17 @@
 **Modular Car Code Locks** allows players to deploy code locks to Modular Cars.
 
-- Similar to key locks, players that do not have authorization to the code lock cannot access any of the car's features.
-- By default, you can only deploy a code lock to a car that is on a lift. This is configurable.
-- You cannot deploy a code lock to a car while building blocked.
-- If you have a code lock in your inventory, it will be used, or else one will be crafted if you have the resources. Locks can be free with additional permissions.
-- When the module that the lock is deployed to is removed at a lift, the lock will automatically be moved to another driver seat module. If all driver seat modules are removed, the lock is removed as well, which is consistent with key lock behavior.
-- If you have both a key lock and code lock on a car, you will need both the key and the code to access the car. This is not recommended because it defeats the purpose of having the code lock.
+Players can use a command to a deploy a code lock to the car they are aiming at. A lock will be consumed from the player's inventory if available, or else a lock will be automatically purchased for the configured price. Locks are free for players with additional permission. Players that do not have authorization to the car's code lock cannot access any of the car's features.
+
+Requirements to place a code lock:
+- The player must have the `carcodelocks.use` permission.
+- The player must not be building blocked.
+- By default, the car must be on a lift. This is configurable.
+- The car must have a cockpit module (i.e., driver seat). The code lock will deploy to the front-most cockpit module if there are multiple.
+
+Notes:
+- When the cockpit module that the lock is deployed to is removed, such as at a lift or by another plugin, the lock will automatically be moved to another cockpit module. If all cockpit modules are removed, the lock is removed as well. This behavior is consistent with key locks.
+- Code locks can be removed by anyone while unlocked. Unauthorized players can only remove a car's code lock by removing all cockpit modules. That can be blocked with a configuration option to make it imposible for unauthorized players to edit the vehicle or remove the code lock while it's locked.
+- If you have both a key lock and code lock on a car, you will need both the key and the code to access the car. This is not recommended.
 
 ## Commands
 
@@ -30,7 +36,7 @@
 ```
 
 - `AllowDeployOffLift` (`true` or `false`) -- Whether to allow players to deploy code locks to cars that are not currently on a lift. This is `false` by default to be consistent with how key locks work.
-- `AllowEditingWhileLockedOut` (`true` or `false`) -- Whether to allow players to edit cars at lifts when they are not authorized to the car's code lock. This is `true` by default to be consistent with how key locks work.
+- `AllowEditingWhileLockedOut` (`true` or `false`) -- Whether to allow players to edit a car at a lift when they are locked out of the code lock (i.e., when they are not authorized to the lock). This is `true` by default to be consistent with how key locks work. Setting this to `false` will make it impossible for unauthorized players to edit the car.
 - `CodeLockCost` -- The amount to charge a player when crafting a code lock automatically.
 - `CooldownSeconds` -- Cooldown to prevent players from using this plugin to make locks faster than the game naturally allows with crafting. Configure this based on the crafting speed of locks on your server.
 
@@ -63,7 +69,7 @@ CodeLock API_DeployCodeLock(ModularCar car, BasePlayer player)
 
 The return value will be the newly deployed lock, or `null` if a lock was not deployed for any of the following reasons.
 - The car was destroyed or is "dead"
-- The car has no driver seats
+- The car has no cockpits
 - The car already has a code lock
 - Another plugin blocked it with a hook
 
@@ -79,7 +85,7 @@ The return value will be the newly deployed lock, or `null` if a lock was not de
 bool CanDeployCarCodeLock(ModularCar car, BasePlayer player)
 ```
 
-Note: The `BasePlayer` parameter may be `null` if another plugin initiated the code lock deployment without providing a player.
+Note: The `BasePlayer` parameter may be `null` if another plugin initiated the code lock deployment without specifying a player.
 
 #### OnItemDeployed
 
