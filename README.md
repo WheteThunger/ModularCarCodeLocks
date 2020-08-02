@@ -1,25 +1,25 @@
-**Modular Car Code Locks** allows players to deploy code locks to Modular Cars.
+**Modular Car Code Locks** allows players to deploy code locks to Modular Cars at the car lift UI or using a command.
 
-Players can use a command to a deploy a code lock to the car they are aiming at. A lock will be consumed from the player's inventory if available, or else a lock will be automatically purchased for the configured price. Locks are free for players with additional permission. Players that do not have authorization to the car's code lock cannot access any of the car's features.
-
-Requirements to place a code lock:
-- The player must have the `carcodelocks.use` permission.
-- The player must not be building blocked.
-- By default, the car must be on a lift. This is configurable.
-- The car must have a cockpit module (i.e., driver seat). The code lock will deploy to the front-most cockpit module if there are multiple.
+Deploying a code lock to a car will consume a lock from the player's inventory if available, or else a lock will be automatically purchased for the configured price. Locks are free for players with additional permission.
 
 Notes:
-- When the cockpit module that the lock is deployed to is removed, such as at a lift or by another plugin, the lock will automatically be moved to another cockpit module. If all cockpit modules are removed, the lock is removed as well. This behavior is consistent with key locks.
-- Code locks can be removed by anyone while unlocked. Unauthorized players can only remove a car's code lock by removing all cockpit modules. That can be blocked with a configuration option to make it imposible for unauthorized players to edit the vehicle or remove the code lock while it's locked.
-- If you have both a key lock and code lock on a car, you will need both the key and the code to access the car. This is not recommended.
+- Players that do not have authorization to a car's code lock cannot access any of the car's features.
+- A car must have a cockpit module (i.e., driver seat) to receive a lock. The code lock will deploy to the front-most cockpit module if there are multiple.
+- If the lock's parent cockpit is removed, the lock is moved to another cockpit module if present, else destroyed.
+- Unauthorized players can remove a car's code lock at a lift via the UI button or by removing all cockpit modules. That can be blocked with a configuration option to make it imposible for unauthorized players to edit the vehicle.
+- Removing a code lock from a car via the UI will add the lock to your inventory, unless you have the `carcodelocks.free` permission.
+- If a car has both a key lock and code lock, players will need both the key and the code to access the car. This is not recommended.
 
 ## Commands
 
 - `carcodelock` (or `ccl`) -- Deploy a code lock to the car you are aiming at. You must be within several meters of the car. You can also aim at a lift to target the car currently on it.
+  - The player must not be building blocked.
+  - By default, the car must be on a lift. This is configurable.
 
 ## Permissions
 
-- `carcodelocks.use` -- Allows the player to deploy code locks to cars.
+- `carcodelocks.use` -- Allows the player to use the `carcodelocks` command.
+- `carcodelocks.ui` -- Allows the player to see additional UI buttons to add or remove a code lock from the car they are editing at a lift.
 - `carcodelocks.free` -- Allows the player to deploy code locks to cars without consuming locks or resources from their inventory.
 
 ## Configuration
@@ -31,26 +31,38 @@ Notes:
     "Amount": 100,
     "ItemShortName": "metal.fragments"
   },
-  "CooldownSeconds": 10.0
+  "CooldownSeconds": 10.0,
+  "UISettings": {
+    "AddButtonColor": "0.44 0.54 0.26 1",
+    "AnchorMax": "1 0",
+    "AnchorMin": "1 0",
+    "ButtonTextColor": "0.97 0.92 0.88 1",
+    "OffsetMax": "-68 377",
+    "OffsetMin": "-255 349",
+    "RemoveButtonColor": "0.7 0.3 0 1"
+  }
 }
 ```
 
-- `AllowDeployOffLift` (`true` or `false`) -- Whether to allow players to deploy code locks to cars that are not currently on a lift. This is `false` by default to be consistent with how key locks work.
-- `AllowEditingWhileLockedOut` (`true` or `false`) -- Whether to allow players to edit a car at a lift when they are locked out of the code lock (i.e., when they are not authorized to the lock). This is `true` by default to be consistent with how key locks work. Setting this to `false` will make it impossible for unauthorized players to edit the car.
+- `AllowDeployOffLift` (`true` or `false`) -- Whether to allow players to deploy code locks to cars that are not currently on a lift, via the `carcodelock` command. This is `false` by default to be consistent with how key locks work.
+- `AllowEditingWhileLockedOut` (`true` or `false`) -- Whether to allow players to edit a car at a lift while they are not authorized to the car's code lock. This is `true` by default to be consistent with how key locks work. Setting this to `false` will make it impossible for unauthorized players to edit the car.
 - `CodeLockCost` -- The amount to charge a player when crafting a code lock automatically.
-- `CooldownSeconds` -- Cooldown to prevent players from using this plugin to make locks faster than the game naturally allows with crafting. Configure this based on the crafting speed of locks on your server.
+- `CooldownSeconds` -- Cooldown for players to purchase locks, to prevent players from making locks faster than they can craft them. Configure this based on the crafting speed of locks on your server.
+- `UISettings` -- (Advanced) Control the display of the UI buttons.
 
 ## Localization
 
 ```json
 {
+  "UI.AddCodeLock": "Add Code Lock",
+  "UI.RemoveCodeLock": "REMOVE Code Lock",
   "Error.NoPermission": "You don't have permission to use this command.",
   "Error.BuildingBlocked": "Error: Cannot do that while building blocked.",
   "Error.NoCarFound": "Error: No car found.",
   "Error.CarDead": "Error: That car is dead.",
   "Error.NotOnLift": "Error: That car must be on a lift to receive a lock.",
   "Error.HasLock": "Error: That car already has a lock.",
-  "Error.NoCockpit": "Error: That car needs a driver seat to receive a lock.",
+  "Error.NoCockpit": "Error: That car needs a cockpit module to receive a lock.",
   "Error.InsufficientResources": "Error: You need <color=red>{0} {1}</color> to craft a lock.",
   "Error.Cooldown": "Please wait <color=red>{0}s</color> and try again.",
   "Error.CarLocked": "That vehicle is locked."
@@ -69,7 +81,7 @@ CodeLock API_DeployCodeLock(ModularCar car, BasePlayer player)
 
 The return value will be the newly deployed lock, or `null` if a lock was not deployed for any of the following reasons.
 - The car was destroyed or is "dead"
-- The car has no cockpits
+- The car has no cockpit modules
 - The car already has a code lock
 - Another plugin blocked it with a hook
 

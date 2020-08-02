@@ -4,20 +4,24 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Serialization;
 using Oxide.Core;
 using Oxide.Core.Libraries.Covalence;
+using Oxide.Game.Rust.Cui;
 using System.Collections.Generic;
 using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("Modular Car Code Locks", "WhiteThunder", "1.0.0")]
+    [Info("Modular Car Code Locks", "WhiteThunder", "1.1.0")]
     [Description("Allows players to deploy code locks to Modular Cars.")]
     internal class CarCodeLocks : CovalencePlugin
     {
         #region Fields
 
-        private PluginConfig pluginConfig;
+        private static CarCodeLocks PluginInstance;
+
+        private CarCodeLocksConfig PluginConfig;
 
         private const string PermissionUse = "carcodelocks.use";
+        private const string PermissionUI = "carcodelocks.ui";
         private const string PermissionFreeLock = "carcodelocks.free";
 
         private const string CodeLockPrefab = "assets/prefabs/locks/keypad/lock.code.prefab";
@@ -26,8 +30,9 @@ namespace Oxide.Plugins
         private const int CodeLockItemId = 1159991980;
 
         private readonly Vector3 CodeLockPosition = new Vector3(-0.9f, 0.35f, -0.5f);
-
-        private CooldownManager Cooldowns;
+        private readonly CarLiftTracker LiftTracker = new CarLiftTracker();
+        private CodeLockUIManager UIManager;
+        private CooldownManager CraftCooldowns;
 
         #endregion
 
@@ -35,32 +40,21 @@ namespace Oxide.Plugins
 
         private void Init()
         {
-            pluginConfig = Config.ReadObject<PluginConfig>();
+            PluginInstance = this;
+            PluginConfig = Config.ReadObject<CarCodeLocksConfig>();
+            UIManager = new CodeLockUIManager(PluginConfig.UISettings);
 
             permission.RegisterPermission(PermissionUse, this);
+            permission.RegisterPermission(PermissionUI, this);
             permission.RegisterPermission(PermissionFreeLock, this);
 
-            Cooldowns = new CooldownManager(pluginConfig.CooldownSeconds);
+            CraftCooldowns = new CooldownManager(PluginConfig.CooldownSeconds);
         }
 
-        private void OnEntityKill(VehicleModuleSeating seatingModule)
+        private void Unload()
         {
-            var car = seatingModule.Vehicle as ModularCar;
-            if (car == null) return;
-
-            var codeLock = seatingModule.GetComponentInChildren<CodeLock>();
-            if (codeLock == null) return;
-
-            // Try to move the lock to another cockpit module
-            codeLock.SetParent(null);
-            NextTick(() =>
-            {
-                var driverModule = car != null ? FindFirstDriverModule(car) : null;
-                if (driverModule != null)
-                    codeLock.SetParent(driverModule);
-                else
-                    codeLock.Kill();
-            });
+            UIManager.DestroyAllUIs();
+            PluginInstance = null;
         }
 
         object CanMountEntity(BasePlayer player, BaseVehicleMountPoint entity)
@@ -84,7 +78,7 @@ namespace Oxide.Plugins
 
         object CanLootEntity(BasePlayer player, ModularCarGarage carLift)
         {
-            if (pluginConfig.AllowEditingWhileLockedOut || !carLift.PlatformIsOccupied) return null;
+            if (PluginConfig.AllowEditingWhileLockedOut || !carLift.PlatformIsOccupied) return null;
             return CanPlayerInteractWithCar(player, carLift.carOccupant);
         }
 
@@ -99,6 +93,87 @@ namespace Oxide.Plugins
             player.ChatMessage(GetMessage(player.IPlayer, "Error.CarLocked"));
 
             return false;
+        }
+
+        void OnLootEntity(BasePlayer player, ModularCarGarage carLift)
+        {
+            LiftTracker.HandlePlayerLootCarLift(player, carLift);
+
+            var car = carLift?.carOccupant;
+            if (car == null) return;
+            UIManager.UpdateCarUI(car);
+        }
+
+        void OnPlayerLootEnd(PlayerLoot inventory)
+        {
+            var player = inventory.GetComponent<BasePlayer>();
+            if (player == null) return;
+            LiftTracker.HandlePlayerLootEnd(player);
+            UIManager.DestroyPlayerUI(player);
+        }
+
+        // Handle the case where a cockpit is added while a player is editing the car
+        void OnEntitySpawned(VehicleModuleSeating seatingModule)
+        {
+            if (seatingModule == null || !seatingModule.HasADriverSeat()) return;
+            NextTick(() =>
+            {
+                var car = seatingModule.Vehicle as ModularCar;
+                if (car == null) return;
+                UIManager.UpdateCarUI(car);
+            });
+        }
+
+        // Handle the case where a cockpit is removed but the car remains
+        // If a lock is present, either move the lock to another cockpit or destroy it
+        private void OnEntityKill(VehicleModuleSeating seatingModule)
+        {
+            if (seatingModule == null || !seatingModule.HasADriverSeat()) return;
+
+            var car = seatingModule.Vehicle as ModularCar;
+            if (car == null) return;
+
+            var codeLock = seatingModule.GetComponentInChildren<CodeLock>();
+            if (codeLock == null)
+            {
+                NextTick(() =>
+                {
+                    if (car != null)
+                        UIManager.UpdateCarUI(car);
+                });
+                return;
+            }
+
+            codeLock.SetParent(null);
+            NextTick(() =>
+            {
+                if (car == null) return;
+
+                var driverModule = FindFirstDriverModule(car);
+                if (driverModule != null)
+                    codeLock.SetParent(driverModule);
+                else
+                {
+                    codeLock.Kill();
+                    UIManager.UpdateCarUI(car);
+                }
+            });
+        }
+
+        // Handle the case where the code lock is removed but the car and cockpit remain
+        private void OnEntityKill(CodeLock codeLock)
+        {
+            if (codeLock == null) return;
+
+            var seatingModule = codeLock.GetParentEntity() as VehicleModuleSeating;
+            if (seatingModule == null) return;
+
+            var car = seatingModule.Vehicle as ModularCar;
+            NextTick(() =>
+            {
+                if (car == null) return;
+                UIManager.UpdateCarUI(car);
+            });
         }
 
         #endregion
@@ -127,29 +202,79 @@ namespace Oxide.Plugins
         {
             if (player.IsServer) return;
 
+            var basePlayer = player.Object as BasePlayer;
             ModularCar car;
+            bool mustCraft;
+
             if (!VerifyPermissionAny(player, PermissionUse) ||
                 !VerifyNotBuildingBlocked(player) ||
                 !VerifyCarFound(player, out car) ||
                 !VerifyCarIsNotDead(player, car) ||
                 !VerifyCarHasNoLock(player, car) ||
                 !VerifyCarCanHaveALock(player, car) ||
-                !VerifyPlayerHasLockOrResources(player) ||
-                !VerifyOffCooldown(player))
+                !VerifyPlayerCanDeployLock(player, out mustCraft) ||
+                DeployWasBlocked(car, basePlayer))
                 return;
-
-            var basePlayer = player.Object as BasePlayer;
-            if (DeployWasBlocked(car, basePlayer)) return;
 
             var codeLock = DeployCodeLockForPlayer(car, basePlayer, isFree: player.HasPermission(PermissionFreeLock));
             if (codeLock == null) return;
 
-            Cooldowns.UpdateLastUsedForPlayer(player.Id);
+            if (mustCraft)
+                CraftCooldowns.UpdateLastUsedForPlayer(player.Id);
+        }
+
+        [Command("carcodelock.ui.deploy")]
+        private void UICommandDeploy(IPlayer player, string cmd, string[] args)
+        {
+            if (player.IsServer) return;
+            if (!player.HasPermission(PermissionUI)) return;
+
+            var basePlayer = player.Object as BasePlayer;
+            var car = LiftTracker.GetCarPlayerIsLooting(basePlayer);
+            if (car == null) return;
+
+            bool mustCraft;
+
+            if (!VerifyCarIsNotDead(player, car) ||
+                !VerifyCarHasNoLock(player, car) ||
+                !VerifyCarCanHaveALock(player, car) ||
+                !VerifyPlayerCanDeployLock(player, out mustCraft) ||
+                DeployWasBlocked(car, basePlayer))
+                return;
+
+            var codeLock = DeployCodeLockForPlayer(car, basePlayer, isFree: player.HasPermission(PermissionFreeLock));
+            if (codeLock == null) return;
+
+            if (mustCraft)
+                CraftCooldowns.UpdateLastUsedForPlayer(player.Id);
+        }
+
+        [Command("carcodelock.ui.remove")]
+        private void UICommandRemove(IPlayer player, string cmd, string[] args)
+        {
+            if (player.IsServer) return;
+            if (!player.HasPermission(PermissionUI)) return;
+
+            var basePlayer = player.Object as BasePlayer;
+            var car = LiftTracker.GetCarPlayerIsLooting(basePlayer);
+            if (car == null) return;
+
+            var codeLock = GetCarCodeLock(car);
+            if (codeLock == null) return;
+            
+            codeLock.Kill();
+
+            if (!player.HasPermission(PermissionFreeLock))
+            {
+                var codeLockItem = ItemManager.CreateByItemID(CodeLockItemId);
+                if (codeLockItem == null) return;
+                basePlayer.GiveItem(codeLockItem);
+            }
         }
 
         #endregion
 
-        #region Helpers
+        #region Helper Methods
 
         private bool DeployWasBlocked(ModularCar car, BasePlayer player)
         {
@@ -182,7 +307,7 @@ namespace Oxide.Plugins
             var basePlayer = player.Object as BasePlayer;
             var entity = GetLookEntity(basePlayer);
 
-            if (pluginConfig.AllowDeployOffLift)
+            if (PluginConfig.AllowDeployOffLift)
             {
                 car = entity as ModularCar;
                 if (car != null) return true;
@@ -231,33 +356,56 @@ namespace Oxide.Plugins
 
         private bool VerifyCarCanHaveALock(IPlayer player, ModularCar car)
         {
-            if (car.carLock.CanHaveALock()) return true;
+            if (CanCarHaveCodeLock(car)) return true;
             ReplyToPlayer(player, "Error.NoCockpit");
             return false;
         }
 
-        private bool VerifyPlayerHasLockOrResources(IPlayer player)
+        private bool VerifyPlayerCanDeployLock(IPlayer player, out bool mustCraft)
         {
-            if (player.HasPermission(PermissionFreeLock)) return true;
+            mustCraft = false;
+            if (player.HasPermission(PermissionFreeLock) || DoesPlayerHaveLock(player)) return true;
 
-            var playerInventory = (player.Object as BasePlayer).inventory;
-            if (playerInventory.FindItemID(CodeLockItemId) != null) return true;
+            mustCraft = true;
+            return VerifyPlayerCanCraftLock(player) && VerifyOffCooldown(player);
+        }
 
-            var itemCost = pluginConfig.CodeLockCost;
+        private bool VerifyPlayerCanCraftLock(IPlayer player)
+        {
+            if (CanPlayerCraftLock(player)) return true;
+
+            var itemCost = PluginConfig.CodeLockCost;
             var itemDefinition = itemCost.GetItemDefinition();
-            if (playerInventory.GetAmount(itemDefinition.itemid) >= itemCost.Amount) return true;
-
             ReplyToPlayer(player, "Error.InsufficientResources", itemCost.Amount, itemDefinition.displayName.translated);
             return false;
         }
 
         private bool VerifyOffCooldown(IPlayer player)
         {
-            var secondsRemaining = Cooldowns.GetSecondsRemaining(player.Id);
+            var secondsRemaining = CraftCooldowns.GetSecondsRemaining(player.Id);
             if (secondsRemaining <= 0) return true;
             ReplyToPlayer(player, "Error.Cooldown", Math.Ceiling(secondsRemaining));
             return false;
         }
+        
+        private bool CanPlayerDeployLock(IPlayer player) =>
+            player.HasPermission(PermissionFreeLock) || 
+            DoesPlayerHaveLock(player) || 
+            CanPlayerCraftLock(player);
+
+        private bool DoesPlayerHaveLock(IPlayer player) =>
+            (player.Object as BasePlayer).inventory.FindItemID(CodeLockItemId) != null;
+
+        private bool CanPlayerCraftLock(IPlayer player)
+        {
+            var itemCost = PluginConfig.CodeLockCost;
+            var itemDefinition = itemCost.GetItemDefinition();
+            var playerInventory = (player.Object as BasePlayer).inventory;
+            return playerInventory.GetAmount(itemCost.GetItemDefinition().itemid) >= itemCost.Amount;
+        }
+
+        private bool CanCarHaveCodeLock(ModularCar car) =>
+            FindFirstDriverModule(car) != null;
 
         private BaseEntity GetLookEntity(BasePlayer player)
         {
@@ -284,7 +432,7 @@ namespace Oxide.Plugins
             var codeLockItem = player.inventory.FindItemID(CodeLockItemId);
             if (codeLockItem == null && !isFree)
             {
-                var itemCost = pluginConfig.CodeLockCost;
+                var itemCost = PluginConfig.CodeLockCost;
                 if (itemCost.Amount > 0)
                     player.inventory.Take(null, itemCost.GetItemID(), itemCost.Amount);
             }
@@ -329,6 +477,8 @@ namespace Oxide.Plugins
             car.SetSlot(BaseEntity.Slot.Lock, codeLock);
 
             Effect.server.Run(CodeLockDeployedEffectPrefab, codeLock.transform.position);
+            
+            UIManager.UpdateCarUI(car);
 
             return codeLock;
         }
@@ -354,6 +504,156 @@ namespace Oxide.Plugins
                 }
             }
             return null;
+        }
+
+        #endregion
+
+        #region Helper Classes
+
+        internal class CarLiftTracker
+        {
+            private readonly Dictionary<ModularCar, List<BasePlayer>> LootersOfCar = new Dictionary<ModularCar, List<BasePlayer>>();
+            private readonly Dictionary<BasePlayer, ModularCar> LootingCar = new Dictionary<BasePlayer, ModularCar>();
+
+            public ModularCar GetCarPlayerIsLooting(BasePlayer player) =>
+                LootingCar.ContainsKey(player) ? LootingCar[player] : null;
+
+            public List<BasePlayer> GetPlayersLootingCar(ModularCar car) =>
+                LootersOfCar.ContainsKey(car) ? LootersOfCar[car] : new List<BasePlayer>();
+
+            public void HandlePlayerLootCarLift(BasePlayer player, ModularCarGarage carLift)
+            {
+                var car = carLift?.carOccupant;
+                if (car == null) return;
+
+                if (LootersOfCar.ContainsKey(car))
+                    LootersOfCar[car].Add(player);
+                else
+                    LootersOfCar.Add(car, new List<BasePlayer> { player });
+
+                if (LootingCar.ContainsKey(player))
+                    LootingCar[player] = car;
+                else
+                    LootingCar.Add(player, car);
+            }
+
+            public void HandlePlayerLootEnd(BasePlayer player)
+            {
+                if (!LootingCar.ContainsKey(player)) return;
+
+                var car = LootingCar[player];
+                LootingCar.Remove(player);
+
+                if (LootersOfCar.ContainsKey(car))
+                {
+                    LootersOfCar[car].Remove(player);
+                    if (LootersOfCar[car].Count == 0)
+                        LootersOfCar.Remove(car);
+                }
+            }
+        }
+
+        internal class CodeLockUIManager
+        {
+            private enum UIState { AddLock, RemoveLock }
+
+            private const string CodeLockUIName = "CarCodeLocks.AddRemoveLockUI";
+
+            private readonly UISettings Settings;
+            private readonly Dictionary<BasePlayer, UIState> PlayerUIStates = new Dictionary<BasePlayer, UIState>();
+
+            public CodeLockUIManager(UISettings settings)
+            {
+                Settings = settings;
+            }
+
+            public void DestroyAllUIs()
+            {
+                var keys = PlayerUIStates.Keys;
+                if (keys.Count == 0) return;
+
+                var playerList = new BasePlayer[keys.Count];
+                keys.CopyTo(playerList, 0);
+
+                foreach (var player in playerList)
+                    DestroyPlayerUI(player);
+            }
+
+            public void UpdateCarUI(ModularCar car)
+            {
+                var looters = PluginInstance.LiftTracker.GetPlayersLootingCar(car);
+
+                if (!PluginInstance.CanCarHaveCodeLock(car))
+                {
+                    foreach (var player in looters)
+                        DestroyPlayerUI(player);
+                    return;
+                }
+
+                var uiState = PluginInstance.GetCarCodeLock(car) == null ? UIState.AddLock : UIState.RemoveLock;
+                foreach (var player in looters)
+                    UpdatePlayerCarUI(player, uiState);
+            }
+
+            private void UpdatePlayerCarUI(BasePlayer player, UIState uiState)
+            {
+                if (!player.IPlayer.HasPermission(PermissionUI)) return;
+
+                if (PlayerUIStates.ContainsKey(player))
+                {
+                    if (PlayerUIStates[player] == uiState) return;
+                    DestroyPlayerUI(player);
+                }
+
+                if (uiState == UIState.AddLock && !PluginInstance.CanPlayerDeployLock(player.IPlayer))
+                    return;
+
+                SendPlayerUI(player, uiState);
+            }
+
+            public void DestroyPlayerUI(BasePlayer player)
+            {
+                if (PlayerUIStates.ContainsKey(player))
+                {
+                    CuiHelper.DestroyUi(player, CodeLockUIName);
+                    PlayerUIStates.Remove(player);
+                }
+            }
+
+            private void SendPlayerUI(BasePlayer player, UIState uiState)
+            {
+                var cuiElements = new CuiElementContainer
+                {
+                    {
+                        new CuiButton
+                        {
+                            Text = {
+                                Text = PluginInstance.GetMessage(player.IPlayer, uiState == UIState.AddLock ? "UI.AddCodeLock" : "UI.RemoveCodeLock"),
+                                Color = Settings.ButtonTextColor,
+                                Align = TextAnchor.MiddleCenter,
+                                FadeIn = 0.25f
+                            },
+                            Button =
+                            {
+                                Color = uiState == UIState.AddLock ? Settings.AddButtonColor : Settings.RemoveButtonColor,
+                                Command = uiState == UIState.AddLock ? "carcodelock.ui.deploy" : "carcodelock.ui.remove"
+                            },
+                            RectTransform =
+                            {
+                                AnchorMin = Settings.AnchorMin,
+                                AnchorMax = Settings.AnchorMax,
+                                OffsetMin = Settings.OffsetMin,
+                                OffsetMax = Settings.OffsetMax
+                            }
+                        },
+                        "Hud.Menu",
+                        CodeLockUIName
+                    }
+                };
+
+                CuiHelper.AddUi(player, cuiElements);
+                PlayerUIStates.Add(player, uiState);
+            }
         }
 
         internal class CooldownManager
@@ -385,7 +685,7 @@ namespace Oxide.Plugins
 
         #region Configuration
 
-        internal class PluginConfig
+        internal class CarCodeLocksConfig
         {
             [JsonProperty("AllowDeployOffLift")]
             public bool AllowDeployOffLift = false;
@@ -402,6 +702,9 @@ namespace Oxide.Plugins
                 ItemShortName = "metal.fragments",
                 Amount = 100,
             };
+
+            [JsonProperty("UISettings")]
+            public UISettings UISettings = new UISettings();
         }
 
         internal class ItemCost
@@ -419,8 +722,32 @@ namespace Oxide.Plugins
                 GetItemDefinition().itemid;
         }
 
-        private PluginConfig GetDefaultConfig() =>
-            new PluginConfig();
+        internal class UISettings
+        {
+            [JsonProperty("AnchorMin")]
+            public string AnchorMin = "1 0";
+
+            [JsonProperty("AnchorMax")]
+            public string AnchorMax = "1 0";
+
+            [JsonProperty("OffsetMin")]
+            public string OffsetMin = "-255 349";
+
+            [JsonProperty("OffsetMax")]
+            public string OffsetMax = "-68 377";
+
+            [JsonProperty("AddButtonColor")]
+            public string AddButtonColor = "0.44 0.54 0.26 1";
+
+            [JsonProperty("RemoveButtonColor")]
+            public string RemoveButtonColor = "0.7 0.3 0 1";
+
+            [JsonProperty("ButtonTextColor")]
+            public string ButtonTextColor = "0.97 0.92 0.88 1";
+        }
+
+        private CarCodeLocksConfig GetDefaultConfig() =>
+            new CarCodeLocksConfig();
 
         protected override void LoadDefaultConfig() =>
             Config.WriteObject(GetDefaultConfig(), true);
@@ -442,6 +769,8 @@ namespace Oxide.Plugins
         {
             lang.RegisterMessages(new Dictionary<string, string>
             {
+                ["UI.AddCodeLock"] = "Add Code Lock",
+                ["UI.RemoveCodeLock"] = "REMOVE Code Lock",
                 ["Error.NoPermission"] = "You don't have permission to use this command.",
                 ["Error.BuildingBlocked"] = "Error: Cannot do that while building blocked.",
                 ["Error.NoCarFound"] = "Error: No car found.",
