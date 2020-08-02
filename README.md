@@ -1,4 +1,4 @@
-**Modular Car Code Locks** allows players to deploy code locks to Modular Cars at the car lift UI or using a command.
+**Modular Car Code Locks** allows players to deploy code locks to Modular Cars with a car lift UI or using a command.
 
 Deploying a code lock to a car will consume a lock from the player's inventory if available, or else a lock will be automatically purchased for the configured price. Locks are free for players with additional permission.
 
@@ -10,6 +10,11 @@ Notes:
 - Removing a code lock from a car via the UI will add the lock to your inventory, unless you have the `carcodelocks.free` permission.
 - If a car has both a key lock and code lock, players will need both the key and the code to access the car. This is not recommended.
 
+## UI Screenshots
+
+![Add Code Lock Button](https://i.imgur.com/Xk91dHF.png)
+![Remove Code Lock Button](https://i.imgur.com/IT1xsrZ.png)
+
 ## Commands
 
 - `carcodelock` (or `ccl`) -- Deploy a code lock to the car you are aiming at. You must be within several meters of the car. You can also aim at a lift to target the car currently on it.
@@ -19,7 +24,7 @@ Notes:
 ## Permissions
 
 - `carcodelocks.use` -- Allows the player to use the `carcodelocks` command.
-- `carcodelocks.ui` -- Allows the player to see additional UI buttons to add or remove a code lock from the car they are editing at a lift.
+- `carcodelocks.ui` -- Allows the player to deploy and remove code locks via UI buttons while editing a car at a lift. This can be granted by itself to only allow deploying code locks this way.
 - `carcodelocks.free` -- Allows the player to deploy code locks to cars without consuming locks or resources from their inventory.
 
 ## Configuration
@@ -108,8 +113,3 @@ void OnItemDeployed(Deployer deployer, BaseEntity entity)
 ```
 
 Note: The `BaseEntity` parameter will be the `ModularCar` instance.
-
-## Screenshots
-
-![Add Code Lock Button](https://i.imgur.com/Xk91dHF.png)
-![Remove Code Lock Button](https://i.imgur.com/IT1xsrZ.png)
