@@ -108,3 +108,8 @@ void OnItemDeployed(Deployer deployer, BaseEntity entity)
 ```
 
 Note: The `BaseEntity` parameter will be the `ModularCar` instance.
+
+## Screenshots
+
+![Add Code Lock Button](https://i.imgur.com/Xk91dHF.png)
+![Remove Code Lock Button](https://i.imgur.com/IT1xsrZ.png)
