@@ -99,7 +99,7 @@ The return value will be the newly deployed lock, or `null` if a lock was not de
 - Returning `null` results in the default behavior.
 
 ```csharp
-bool CanDeployCarCodeLock(ModularCar car, BasePlayer player)
+object CanDeployCarCodeLock(ModularCar car, BasePlayer player)
 ```
 
 Note: The `BasePlayer` parameter may be `null` if another plugin initiated the code lock deployment without specifying a player.
