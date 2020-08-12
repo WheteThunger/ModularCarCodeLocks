@@ -59,7 +59,7 @@ Notes:
 - `AllowEditingWhileLockedOut` (`true` or `false`) -- Whether to allow players to edit a car at a lift while they are not authorized to the car's code lock. This is `true` by default to be consistent with how key locks work. Setting this to `false` will make it impossible for unauthorized players to edit the car.
 - `CodeLockCost` -- The amount to charge a player when crafting a code lock automatically.
 - `CooldownSeconds` -- Cooldown for players to purchase locks, to prevent players from making locks faster than they can craft them. Configure this based on the crafting speed of locks on your server.
-- `SharingSettings` (each `true` or `false`) -- Whether to allow players to by bypass locks placed by their clanmates, ally clanmates, friends, or teammates. More advanced sharing (such as player's being in control of these settings) can be achieved via compatible sharing plugins.
+- `SharingSettings` (each `true` or `false`) -- Whether to allow players to bypass locks placed by their clanmates, ally clanmates, friends, or teammates. More advanced sharing (such as player's being in control of these settings) can be achieved via compatible sharing plugins.
 - `UISettings` -- (Advanced) Control the display of the UI buttons.
 
 ## Localization
