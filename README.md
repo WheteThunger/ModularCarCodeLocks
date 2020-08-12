@@ -3,7 +3,7 @@
 Deploying a code lock to a car will consume a lock from the player's inventory if available, or else a lock will be automatically purchased for the configured price. Locks are free for players with additional permission.
 
 Notes:
-- Players that do not have authorization to a car's code lock cannot access any of the car's features.
+- Players that do not have authorization to a car's code lock cannot access any of the car's features. Authorization may be shared with the lock owner's team, friends, or clanmates based on the plugin configuration, or via compatible sharing plugins.
 - A car must have a cockpit module (i.e., driver seat) to receive a lock. The code lock will deploy to the front-most cockpit module if there are multiple.
 - If the lock's parent cockpit is removed, the lock is moved to another cockpit module if present, else destroyed.
 - Unauthorized players can remove a car's code lock at a lift via the UI button or by removing all cockpit modules. That can be blocked with a configuration option to make it imposible for unauthorized players to edit the vehicle.
@@ -37,6 +37,12 @@ Notes:
     "ItemShortName": "metal.fragments"
   },
   "CooldownSeconds": 10.0,
+  "SharingSettings": {
+    "Clan": false,
+    "ClanOrAlly": false,
+    "Friends": false,
+    "Team": false
+  },
   "UISettings": {
     "AddButtonColor": "0.44 0.54 0.26 1",
     "AnchorMax": "1 0",
@@ -53,6 +59,7 @@ Notes:
 - `AllowEditingWhileLockedOut` (`true` or `false`) -- Whether to allow players to edit a car at a lift while they are not authorized to the car's code lock. This is `true` by default to be consistent with how key locks work. Setting this to `false` will make it impossible for unauthorized players to edit the car.
 - `CodeLockCost` -- The amount to charge a player when crafting a code lock automatically.
 - `CooldownSeconds` -- Cooldown for players to purchase locks, to prevent players from making locks faster than they can craft them. Configure this based on the crafting speed of locks on your server.
+- `SharingSettings` (each `true` or `false`) -- Whether to allow players to by bypass locks placed by their clanmates, ally clanmates, friends, or teammates. More advanced sharing (such as player's being in control of these settings) can be achieved via compatible sharing plugins.
 - `UISettings` -- (Advanced) Control the display of the UI buttons.
 
 ## Localization
@@ -113,3 +120,13 @@ void OnItemDeployed(Deployer deployer, BaseEntity entity)
 ```
 
 Note: The `BaseEntity` parameter will be the `ModularCar` instance.
+
+#### CanUseLockedEntity
+
+This is an Oxide hook that is normally called when a player attempts to use a locked entity such as a door or box. It's also explicitly called by this plugin to allow for compatibility with other plugins.
+
+```csharp
+object CanUseLockedEntity(BasePlayer player, CodeLock codeLock)
+```
+
+When using this hook, you can determine that it was called for a car by checking if the `CodeLock` is parented to a `BaseVehicleModule` entity (which will be parented to a `ModularCar` entity).

@@ -4,17 +4,21 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Serialization;
 using Oxide.Core;
 using Oxide.Core.Libraries.Covalence;
+using Oxide.Core.Plugins;
 using Oxide.Game.Rust.Cui;
 using System.Collections.Generic;
 using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("Modular Car Code Locks", "WhiteThunder", "1.1.0")]
+    [Info("Modular Car Code Locks", "WhiteThunder", "1.2.0")]
     [Description("Allows players to deploy code locks to Modular Cars.")]
     internal class CarCodeLocks : CovalencePlugin
     {
         #region Fields
+
+        [PluginReference]
+        private Plugin Clans, Friends;
 
         private static CarCodeLocks PluginInstance;
 
@@ -87,12 +91,17 @@ namespace Oxide.Plugins
             if (car == null) return null;
 
             var codeLock = GetCarCodeLock(car);
-            if (codeLock == null || IsPlayerAuthorizedToCodeLock(player, codeLock)) return null;
+            if (codeLock == null) return null;
 
-            Effect.server.Run(codeLock.effectDenied.resourcePath, codeLock, 0, Vector3.zero, Vector3.forward);
-            player.ChatMessage(GetMessage(player.IPlayer, "Error.CarLocked"));
+            if (!CanPlayerBypassLock(player, codeLock))
+            {
+                Effect.server.Run(codeLock.effectDenied.resourcePath, codeLock, 0, Vector3.zero, Vector3.forward);
+                player.ChatMessage(GetMessage(player.IPlayer, "Error.CarLocked"));
+                return false;
+            }
 
-            return false;
+            Effect.server.Run(codeLock.effectUnlocked.resourcePath, codeLock, 0, Vector3.zero, Vector3.forward);
+            return null;
         }
 
         void OnLootEntity(BasePlayer player, ModularCarGarage carLift)
@@ -261,7 +270,7 @@ namespace Oxide.Plugins
 
             var codeLock = GetCarCodeLock(car);
             if (codeLock == null) return;
-            
+
             codeLock.Kill();
 
             if (!player.HasPermission(PermissionFreeLock))
@@ -387,10 +396,10 @@ namespace Oxide.Plugins
             ReplyToPlayer(player, "Error.Cooldown", Math.Ceiling(secondsRemaining));
             return false;
         }
-        
+
         private bool CanPlayerDeployLock(IPlayer player) =>
-            player.HasPermission(PermissionFreeLock) || 
-            DoesPlayerHaveLock(player) || 
+            player.HasPermission(PermissionFreeLock) ||
+            DoesPlayerHaveLock(player) ||
             CanPlayerCraftLock(player);
 
         private bool DoesPlayerHaveLock(IPlayer player) =>
@@ -477,7 +486,7 @@ namespace Oxide.Plugins
             car.SetSlot(BaseEntity.Slot.Lock, codeLock);
 
             Effect.server.Run(CodeLockDeployedEffectPrefab, codeLock.transform.position);
-            
+
             UIManager.UpdateCarUI(car);
 
             return codeLock;
@@ -486,10 +495,50 @@ namespace Oxide.Plugins
         private CodeLock GetCarCodeLock(ModularCar car) =>
             car.GetSlot(BaseEntity.Slot.Lock) as CodeLock;
 
-        private bool IsPlayerAuthorizedToCodeLock(BasePlayer player, CodeLock codeLock) =>
-            !codeLock.IsLocked() ||
-            codeLock.whitelistPlayers.Contains(player.userID) ||
-            codeLock.guestPlayers.Contains(player.userID);
+        private bool CanPlayerBypassLock(BasePlayer player, CodeLock codeLock)
+        {
+            if (!codeLock.IsLocked()) return true;
+
+            object hookResult = Interface.CallHook("CanUseLockedEntity", player, codeLock);
+            if (hookResult is bool) return (bool)hookResult;
+
+            return IsPlayerAuthorizedToCodeLock(player.userID, codeLock) || IsCodeLockSharedWithPlayer(player, codeLock);
+        }
+
+        private bool IsPlayerAuthorizedToCodeLock(ulong userID, CodeLock codeLock) =>
+            codeLock.whitelistPlayers.Contains(userID) || codeLock.guestPlayers.Contains(userID);
+
+        private bool IsCodeLockSharedWithPlayer(BasePlayer player, CodeLock codeLock)
+        {
+            var ownerID = codeLock.OwnerID;
+            if (ownerID == 0 || ownerID == player.userID) return false;
+
+            // In case the owner was locked out for some reason
+            if (!IsPlayerAuthorizedToCodeLock(ownerID, codeLock)) return false;
+
+            var sharingSettings = PluginConfig.SharingSettings;
+
+            if (sharingSettings.Team && player.currentTeam != 0)
+            {
+                var team = RelationshipManager.Instance.FindTeam(player.currentTeam);
+                if (team != null && team.members.Contains(ownerID)) return true;
+            }
+
+            if (sharingSettings.Friends && Friends != null)
+            {
+                var friendsResult = Friends.Call("HasFriend", codeLock.OwnerID, player.userID);
+                if (friendsResult is bool && (bool)friendsResult) return true;
+            }
+
+            if ((sharingSettings.Clan || sharingSettings.ClanOrAlly) && Clans != null)
+            {
+                var clanMethodName = sharingSettings.ClanOrAlly ? "IsMemberOrAlly" : "IsClanMember";
+                var clanResult = Clans.Call(clanMethodName, ownerID.ToString(), player.UserIDString);
+                if (clanResult is bool && (bool)clanResult) return true;
+            }
+
+            return false;
+        }
 
         private VehicleModuleSeating FindFirstDriverModule(ModularCar car)
         {
@@ -694,7 +743,7 @@ namespace Oxide.Plugins
             public bool AllowEditingWhileLockedOut = true;
 
             [JsonProperty("CooldownSeconds")]
-            public float CooldownSeconds = 10.0f;
+            public float CooldownSeconds = 10;
 
             [JsonProperty("CodeLockCost")]
             public ItemCost CodeLockCost = new ItemCost
@@ -703,8 +752,26 @@ namespace Oxide.Plugins
                 Amount = 100,
             };
 
+            [JsonProperty("SharingSettings")]
+            public SharingSettings SharingSettings = new SharingSettings();
+
             [JsonProperty("UISettings")]
             public UISettings UISettings = new UISettings();
+        }
+
+        internal class SharingSettings
+        {
+            [JsonProperty("Clan")]
+            public bool Clan = false;
+
+            [JsonProperty("ClanOrAlly")]
+            public bool ClanOrAlly = false;
+
+            [JsonProperty("Friends")]
+            public bool Friends = false;
+
+            [JsonProperty("Team")]
+            public bool Team = false;
         }
 
         internal class ItemCost
