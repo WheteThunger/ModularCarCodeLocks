@@ -3,7 +3,8 @@
 Deploying a code lock to a car will consume a lock from the player's inventory if available, or else a lock will be automatically purchased for the configured price. Locks are free for players with additional permission.
 
 Notes:
-- Players that do not have authorization to a car's code lock cannot access any of the car's features. Authorization may be shared with the lock owner's team, friends, or clanmates based on the plugin configuration, or via compatible sharing plugins.
+- Players that do not have authorization to a car's code lock cannot access any of the car's features, including seats, engine parts, storage, and fuel. Entering either the code or guest code grants full access until the code is changed.
+  - Authorization may be shared with the lock owner's team, friends, or clanmates based on the plugin configuration, or via compatible sharing plugins. Sharing allows other players to access the car's features without ever entering the code.
 - A car must have a cockpit module (i.e., driver seat) to receive a lock. The code lock will deploy to the front-most cockpit module if there are multiple.
 - If the lock's parent cockpit is removed, the lock is moved to another cockpit module if present, else destroyed.
 - Unauthorized players can remove a car's code lock at a lift via the UI button or by removing all cockpit modules. That can be blocked with a configuration option to make it imposible for unauthorized players to edit the vehicle.
@@ -18,7 +19,7 @@ Notes:
 ## Commands
 
 - `carcodelock` (or `ccl`) -- Deploy a code lock to the car you are aiming at. You must be within several meters of the car. You can also aim at a lift to target the car currently on it.
-  - The player must not be building blocked.
+  - You must not be building blocked.
   - By default, the car must be on a lift. This is configurable.
 
 ## Permissions
@@ -103,7 +104,7 @@ The return value will be the newly deployed lock, or `null` if a lock was not de
 
 - Called when a player or a plugin tries to deploy a code lock to a modular car.
 - Returning `false` will prevent the code lock from being deployed. If attempted by a player, none of their items will be consumed.
-- Returning `null` results in the default behavior.
+- Returning `null` will result in the default behavior.
 
 ```csharp
 object CanDeployCarCodeLock(ModularCar car, BasePlayer player)
@@ -113,20 +114,38 @@ Note: The `BasePlayer` parameter may be `null` if another plugin initiated the c
 
 #### OnItemDeployed
 
-This is an Oxide hook that is normally called when deploying a code lock or other deployable. It's also explicitly called by this plugin to allow for compatibility with other plugins.
+This is an Oxide hook that is normally called when deploying a code lock or other deployable. To allow for compatibility with other plugins, this plugin calls this hook whenever a code lock is deployed to a car for a player.
+
+Note: This is not called when a lock is deployed via another plugin without specifying a player.
 
 ```csharp
 void OnItemDeployed(Deployer deployer, BaseEntity entity)
+{
+    // Example: Check if the lock was deployed to a car
+    var car = entity as ModularCar;
+    if (car == null) return;
+    var codeLock = car.GetSlot(BaseEntity.Slot.Lock) as CodeLock;
+    if (codeLock != null)
+        Puts("A code lock was deployed to a car!");
+}
 ```
-
-Note: The `BaseEntity` parameter will be the `ModularCar` instance.
 
 #### CanUseLockedEntity
 
-This is an Oxide hook that is normally called when a player attempts to use a locked entity such as a door or box. It's also explicitly called by this plugin to allow for compatibility with other plugins.
+This is an Oxide hook that is normally called when a player attempts to use a locked entity such as a door or box. To allow for compabitility with other plugins, especially sharing plugins, this plugin calls this hook whenever a player tries to access any of a locked car's features, including seats, storage or fuel. This is also called when attempting to edit the vehicle at a lift if the plugin is configured with `AllowEditingWhileLockedOut: false`.
+
+- Not called if the code lock is currently unlocked. This deviates slightly from the Oxide hook which is called for unlocked doors/boxes/cupboards.
+- Returning `true` will allow the player to use the car, regardless of whether they are authorized to the code lock. Unless you know what you are doing, you should return `null` instead to avoid potential hook conflicts.
+- Returning `false` will prevent the player from using the car, regardless of whether they are authorized to the code lock.
+- Returning `null` results in the default behavior.
 
 ```csharp
 object CanUseLockedEntity(BasePlayer player, CodeLock codeLock)
+{
+    // Example: Only let the lock owner access the car (not even players who know the code)
+    if (codeLock == null) return null;
+    var car = (codeLock.GetParentEntity() as VehicleModuleSeating)?.Vehicle as ModularCar;
+    if (car == null || car.OwnerID == 0 || car.OwnerID == player.userID) return null;
+    return false;
+}
 ```
-
-When using this hook, you can determine that it was called for a car by checking if the `CodeLock` is parented to a `BaseVehicleModule` entity (which will be parented to a `ModularCar` entity).
