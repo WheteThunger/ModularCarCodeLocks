@@ -1,4 +1,8 @@
-### Deprecated: This plugin is replaced by [Vehicle Deployed Locks](https://umod.org/plugins/vehicle-deployed-locks) + [Car Lock UI](https://umod.org/plugins/car-lock-ui).
+## Deprecated Notice
+
+**This plugin is replaced by [Vehicle Deployed Locks](https://umod.org/plugins/vehicle-deployed-locks) + [Car Lock UI](https://umod.org/plugins/car-lock-ui).**
+
+## Overview
 
 **Modular Car Code Locks** allows players to deploy code locks to Modular Cars with a car lift UI or using a command.
 
