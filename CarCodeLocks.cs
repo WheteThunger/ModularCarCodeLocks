@@ -11,14 +11,14 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("Modular Car Code Locks", "WhiteThunder", "1.2.0")]
+    [Info("Modular Car Code Locks", "WhiteThunder", "1.2.1")]
     [Description("Allows players to deploy code locks to Modular Cars.")]
     internal class CarCodeLocks : CovalencePlugin
     {
         #region Fields
 
         [PluginReference]
-        private Plugin Clans, Friends;
+        private Plugin Clans, Friends, VehicleDeployedLocks;
 
         private static CarCodeLocks PluginInstance;
 
@@ -53,6 +53,14 @@ namespace Oxide.Plugins
             permission.RegisterPermission(PermissionFreeLock, this);
 
             CraftCooldowns = new CooldownManager(PluginConfig.CooldownSeconds);
+        }
+
+        private void OnServerInitialized()
+        {
+            if (VehicleDeployedLocks == null)
+                LogWarning("This plugin is deprecated. Please migrate to Vehicle Deployed Locks and optionally Car Lock UI from https://umod.org/.");
+            else
+                LogWarning("This plugin is deprecated. You have already installed Vehicle Deployed Locks so please uninstall this plugin to avoid conflicts.");
         }
 
         private void Unload()

@@ -1,6 +1,24 @@
-## Deprecated Notice
+## Deprecation Notice
 
-**This plugin is replaced by [Vehicle Deployed Locks](https://umod.org/plugins/vehicle-deployed-locks) + [Car Lock UI](https://umod.org/plugins/car-lock-ui).**
+**This plugin is deprecated. Instead, please use [Vehicle Deployed Locks](https://umod.org/plugins/vehicle-deployed-locks) and optionally [Car Lock UI](https://umod.org/plugins/car-lock-ui).**
+
+### How to migrate
+
+Migrating is simple and should take 5 minutes.
+
+For basic locking functionality:
+- Install [Vehicle Deployed Locks](https://umod.org/plugins/vehicle-deployed-locks)
+- Update config values in `oxide/config/VehicleDeployedLocks.json` to match the corresponding options from `oxide/config/CarCodeLocks.json`
+  - The `"AllowDeployOffLift"` option no longer exists, meaning deploying code locks to cars is always allowed off car lifts (same as other vehicles), but you can prevent that by only granting the UI permission
+- For any players/groups with permission `carcodelocks.use`, grant `vehicledeployedlocks.codelock.modularcar`
+  - Don't grant this permission if you want the equivalent behavior for the config option `"AllowDeployOffLift": false`
+- For any players/groups with permission `carcodelocks.free`, grant `vehicledeployedlocks.codelock.free`
+
+For the UI button functionality:
+- Install [Car Lock UI](https://umod.org/plugins/car-lock-ui)
+- For any players/groups with permission `carcodelocks.ui`, grant `carlockui.use.codelock`
+
+Then you may uninstall this plugin.
 
 ## Overview
 
